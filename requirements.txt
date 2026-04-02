@@ -1,0 +1,14 @@
+# 核心辨識與下載
+yt-dlp
+faster-whisper
+deep-translator
+zhconv
+pysrt
+python-dotenv
+
+# Web 後端
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+aiofiles

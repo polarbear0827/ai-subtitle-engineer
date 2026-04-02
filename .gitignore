@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+venv/
+pyvenv.cfg
+.env
+
+# Project Specific
+output/
+downloads/
+*.mp3
+*.m4a
+*.srt
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp

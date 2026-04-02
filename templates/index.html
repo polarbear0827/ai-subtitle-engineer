@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Subtitle Engineer | 專業影片字幕工具</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root { --p: #6366f1; --s: #a855f7; --bg: #0f172a; --cb: rgba(30, 41, 59, 0.7); --tx: #f8fafc; --ac: #22d3ee; }
+        * { margin:0; padding:0; box-sizing: border-box; }
+        body { font-family: 'Outfit', sans-serif; background: radial-gradient(circle at top right, #1e1b4b, #0f172a); color: var(--tx); min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .container { width: 90%; max-width: 800px; padding: 40px; background: var(--cb); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        h1 { font-size: 2.2rem; background: linear-gradient(to right, var(--ac), var(--s)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; margin-bottom: 30px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-size: 0.85rem; color: var(--ac); letter-spacing: 1px; }
+        input, select { width: 100%; padding: 12px 18px; background: rgba(15,23,42,0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: white; outline: none; }
+        .btn { width: 100%; padding: 16px; background: linear-gradient(135deg, var(--p), var(--s)); border: none; border-radius: 12px; color: white; font-weight: 600; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(99,102,241,0.4); }
+        #log-container { margin-top: 25px; background: #000; border-radius: 16px; padding: 15px; height: 200px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; display: none; }
+        .log-info { color: #94a3b8; margin-bottom: 4px; }
+        .log-success { color: #4ade80; margin-bottom: 4px; }
+        #download-area { margin-top: 20px; text-align: center; display: none; }
+        .dl-link { display: inline-block; padding: 12px 25px; background: var(--ac); color: #0f172a; text-decoration: none; border-radius: 50px; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Subtitle Engineer</h1>
+        <form id="f">
+            <div class="form-group">
+                <label>影片連結 (YouTube, X, IG, FB)</label>
+                <input type="text" name="url" id="u" placeholder="https://..." required>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="form-group">
+                    <label>模型大小</label>
+                    <select name="model" id="m">
+                        <option value="small">Small (極速)</option>
+                        <option value="medium" selected>Medium (平衡)</option>
+                        <option value="large-v3">Large-v3 (高品質)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>指定語言 (選填)</label>
+                    <input type="text" name="lang" id="l" placeholder="en, ja, zh">
+                </div>
+            </div>
+            <button type="submit" class="btn" id="b">開始執行任務</button>
+        </form>
+        <div id="log-container"></div>
+        <div id="download-area">
+            <p style="margin-bottom: 15px; color: #4ade80;">✅ 字幕處理完成！</p>
+            <a href="#" class="dl-link" id="dl" download>下載 SRT 字幕</a>
+        </div>
+    </div>
+    <script>
+        const f = document.getElementById('f'), log = document.getElementById('log-container'), da = document.getElementById('download-area'), dl = document.getElementById('dl'), b = document.getElementById('b');
+        f.onsubmit = async (e) => {
+            e.preventDefault();
+            log.innerHTML = ''; log.style.display = 'block'; da.style.display = 'none'; b.disabled = true; b.innerText = '處理中...';
+            const fd = new FormData(f);
+            const r = await fetch('/api/transcribe', { method: 'POST', body: fd });
+            const d = await r.json();
+            const es = new EventSource(`/api/logs/${d.task_id}`);
+            es.onmessage = (ev) => {
+                const m = ev.data;
+                if (m.startsWith('COMPLETED:')) {
+                    dl.href = m.replace('COMPLETED:', ''); da.style.display = 'block';
+                    b.disabled = false; b.innerText = '開始執行任務';
+                    es.close(); return;
+                }
+                const div = document.createElement('div');
+                div.className = m.includes('✅') || m.includes('✨') ? 'log-success' : 'log-info';
+                div.innerText = `> ${m}`;
+                log.appendChild(div); log.scrollTop = log.scrollHeight;
+            };
+        };
+    </script>
+</body>
+</html>
