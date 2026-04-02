@@ -54,24 +54,36 @@ class MediaSubtitleEngineer:
         logger.info(f"✅ 下載完成: {audio_path}")
         return audio_path
 
-    def transcribe(self, audio_path: str, lang: Optional[str] = None, model_size: str = "large-v3", device: str = "cuda"):
-        """ASR 辨識模組"""
-        logger.info(f"🎙️ ASR 開始 (模型: {model_size}, 硬體: {device})...")
-        
-        try:
-            model = WhisperModel(model_size, device=device, compute_type="int8_float16")
-        except:
-            logger.warning("⚠️ CUDA 失敗，切換至 CPU")
-            model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    def transcribe(self, audio_path: str, lang: Optional[str] = None, model_size: str = "large-v3", device: str = "auto"):
+        """ASR 辨識模組 — 自動偵測 GPU/CPU"""
+        logger.info(f"🎙️ ASR 開始 (模型: {model_size})...")
+
+        model = None
+        # 嘗試順序: auto(GPU優先) -> CPU float32
+        attempts = [
+            dict(device="auto", compute_type="auto"),
+            dict(device="cpu",  compute_type="float32"),
+        ]
+        last_err = None
+        for attempt in attempts:
+            try:
+                logger.info(f"嘗試載入模型: {attempt}")
+                model = WhisperModel(model_size, **attempt)
+                break
+            except Exception as e:
+                last_err = e
+                logger.warning(f"⚠️ 模型載入失敗 ({attempt}): {e}")
+
+        if model is None:
+            raise RuntimeError(f"無法載入 Whisper 模型，所有嘗試均失敗。最後錯誤: {last_err}")
 
         segments, info = model.transcribe(
-            audio_path, language=lang, beam_size=5, 
-            vad_filter=True, # 移除空白處避免幻聽
+            audio_path, language=lang, beam_size=5,
+            vad_filter=True,
             vad_parameters=dict(min_silence_duration_ms=500)
         )
-        
+
         logger.info(f"偵測語言: {info.language}")
-        
         results = []
         for segment in segments:
             results.append({"start": segment.start, "end": segment.end, "text": segment.text.strip()})
