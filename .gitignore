@@ -21,11 +21,15 @@ pyvenv.cfg
 
 # Project Specific
 output/
+uploads/
 downloads/
 *.mp3
 *.m4a
 *.srt
 *.log
+
+# Virtualenv
+.venv/
 
 # IDE
 .vscode/

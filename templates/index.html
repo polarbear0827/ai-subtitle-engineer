@@ -56,6 +56,12 @@
                     <option value="ko">韓文 (Korean)</option>
                 </select></div>
             </div>
+            <div style="margin-top:15px;">
+                <label style="display:block;margin-bottom:8px;color:var(--ac)">
+                    語境提示 <span style="color:#64748b;font-size:0.8rem;font-weight:400">（選填）給 Whisper 提示關鍵詞，改善俚語/專有名詞辨識</span>
+                </label>
+                <input type="text" name="initial_prompt" id="ip" placeholder="例：タチ、ウケ、BL、推し（日文俚語）；或 slang, brand names（英文）">
+            </div>
             <div class="pg-box" id="pgb"><div class="pg-bar" id="pg"></div></div>
             <button type="submit" class="btn" id="bt" style="margin-top:10px">啟動自動轉錄流程</button>
         </form>

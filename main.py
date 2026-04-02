@@ -1,4 +1,24 @@
-import os, uuid, asyncio, logging, shutil
+import os, sys, uuid, asyncio, logging, shutil
+
+# ── GPU DLL 自動掛載 (nvidia-cublas-cu12 / nvidia-cudnn-cu12) ──────────────
+def _inject_cuda_dll_paths():
+    """把 pip 安裝的 nvidia-*-cu12 DLL 目錄加進 PATH，讓 ctranslate2 找得到 cublas。"""
+    import site
+    for sp in site.getsitepackages():
+        for pkg in ("nvidia/cublas/bin", "nvidia/cudnn/bin",
+                    "nvidia/cuda_runtime/bin", "nvidia/cufft/bin"):
+            dll_dir = os.path.join(sp, pkg.replace("/", os.sep))
+            if os.path.isdir(dll_dir) and dll_dir not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = dll_dir + os.pathsep + os.environ.get("PATH", "")
+                # Python 3.8+ 用 add_dll_directory 才能讓 C extension 找到
+                if hasattr(os, "add_dll_directory"):
+                    try:
+                        os.add_dll_directory(dll_dir)
+                    except OSError:
+                        pass
+
+_inject_cuda_dll_paths()
+# ──────────────────────────────────────────────────────────────────────────────
 from typing import Dict, Optional
 from fastapi import FastAPI, Request, BackgroundTasks, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
@@ -18,7 +38,10 @@ for d in [OUTPUT_DIR, UPLOAD_DIR]:
 INDEX_HTML = os.path.join(BASE_DIR, "templates", "index.html")
 TASKS: Dict[str, dict] = {}
 
-async def run_task(task_id: str, source: str, model_size: str, lang: Optional[str], is_file: bool = False):
+async def run_task(
+    task_id: str, source: str, model_size: str, lang: Optional[str],
+    is_file: bool = False, initial_prompt: Optional[str] = None
+):
     TASKS[task_id]["status"] = "running"
     eng = MediaSubtitleEngineer(OUTPUT_DIR)
     loop = asyncio.get_event_loop()
@@ -38,7 +61,9 @@ async def run_task(task_id: str, source: str, model_size: str, lang: Optional[st
             log_cb("✅ 影片音軌下載成功", progress=30)
         
         log_cb("🎙️ 開始 ASR 語音辨識 (此階段較長，請耐心候)...", progress=40)
-        segs, d_lang = await loop.run_in_executor(None, eng.transcribe, audio_path, lang, model_size)
+        segs, d_lang = await loop.run_in_executor(
+            None, eng.transcribe, audio_path, lang, model_size, "auto", initial_prompt
+        )
         log_cb(f"✅ 辨識完成 (語言: {d_lang})", progress=75)
         
         log_cb("🌍 翻譯處理中 (台灣繁體中文校正)...", progress=85)
@@ -59,17 +84,29 @@ async def run_task(task_id: str, source: str, model_size: str, lang: Optional[st
 async def home(): return FileResponse(INDEX_HTML, media_type="text/html")
 
 @app.post("/api/transcribe")
-async def start_url_task(background_tasks: BackgroundTasks, url: str = Form(...), model: str = Form("large-v3"), lang: str = Form(None)):
+async def start_url_task(
+    background_tasks: BackgroundTasks,
+    url: str = Form(...),
+    model: str = Form("large-v3"),
+    lang: str = Form(None),
+    initial_prompt: str = Form(None),
+):
     tid = str(uuid.uuid4()); TASKS[tid] = {"status": "pending", "logs": [], "output_file": ""}
-    background_tasks.add_task(run_task, tid, url, model, lang or None, False)
+    background_tasks.add_task(run_task, tid, url, model, lang or None, False, initial_prompt or None)
     return {"task_id": tid}
 
 @app.post("/api/upload")
-async def start_file_task(background_tasks: BackgroundTasks, file: UploadFile = File(...), model: str = Form("large-v3"), lang: str = Form(None)):
+async def start_file_task(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    model: str = Form("large-v3"),
+    lang: str = Form(None),
+    initial_prompt: str = Form(None),
+):
     tid = str(uuid.uuid4()); TASKS[tid] = {"status": "pending", "logs": [], "output_file": ""}
     tmp_path = os.path.join(UPLOAD_DIR, f"{tid}{os.path.splitext(file.filename)[1]}")
     with open(tmp_path, "wb") as f: shutil.copyfileobj(file.file, f)
-    background_tasks.add_task(run_task, tid, tmp_path, model, lang or None, True)
+    background_tasks.add_task(run_task, tid, tmp_path, model, lang or None, True, initial_prompt or None)
     return {"task_id": tid}
 
 @app.get("/api/logs/{task_id}")

@@ -11,7 +11,7 @@ from datetime import timedelta
 try:
     import yt_dlp
     from faster_whisper import WhisperModel
-    from deep_translator import GoogleTranslator
+    from deep_translator import GoogleTranslator, MyMemoryTranslator
     from zhconv import convert
 except ImportError as e:
     print(f"❌ 缺少必要套件: {e.name}. 請先執行 'pip install -r requirements.txt'")
@@ -54,9 +54,22 @@ class MediaSubtitleEngineer:
         logger.info(f"✅ 下載完成: {audio_path}")
         return audio_path
 
-    def transcribe(self, audio_path: str, lang: Optional[str] = None, model_size: str = "large-v3", device: str = "auto"):
-        """ASR 辨識模組 — 自動偵測 GPU/CPU"""
+    def transcribe(
+        self,
+        audio_path: str,
+        lang: Optional[str] = None,
+        model_size: str = "large-v3",
+        device: str = "auto",
+        initial_prompt: Optional[str] = None,
+    ):
+        """ASR 辨識模組 — 自動偵測 GPU/CPU
+
+        initial_prompt: 給 Whisper 的上下文提示字串，可減少俚語/專有名詞誤辨。
+        例如日文：'タチ、ウケ、BL、カプ、推し'
+        """
         logger.info(f"🎙️ ASR 開始 (模型: {model_size})...")
+        if initial_prompt:
+            logger.info(f"📝 initial_prompt: {initial_prompt}")
 
         attempts = [
             dict(device="auto", compute_type="auto"),
@@ -68,13 +81,14 @@ class MediaSubtitleEngineer:
             try:
                 logger.info(f"嘗試: {attempt}")
                 model = WhisperModel(model_size, **attempt)
-                # 注意：也把 transcribe 放進來，因為 CUDA 錯誤可能發生在推理階段
                 segments_gen, info = model.transcribe(
-                    audio_path, language=lang, beam_size=5,
+                    audio_path,
+                    language=lang,
+                    beam_size=5,
+                    initial_prompt=initial_prompt,
                     vad_filter=True,
-                    vad_parameters=dict(min_silence_duration_ms=500)
+                    vad_parameters=dict(min_silence_duration_ms=500),
                 )
-                # 實際運行生成器（這裡才真正執行 CUDA 操作）
                 results = []
                 for segment in segments_gen:
                     results.append({"start": segment.start, "end": segment.end, "text": segment.text.strip()})
@@ -84,29 +98,60 @@ class MediaSubtitleEngineer:
                 last_err = e
                 logger.warning(f"⚠️ 失敗 ({attempt['device']}): {e}")
                 if attempt['device'] == 'cpu':
-                    break  # CPU 也失敗，放棄
+                    break
 
         raise RuntimeError(f"無法完成 ASR 辨識。最後錯誤: {last_err}")
 
     def translate_batch(self, segments: List[Dict], source_lang: str, batch_size: int = 30):
-        """翻譯與台灣繁體中文優化"""
+        """翻譯與台灣繁體中文優化（含 retry + fallback）"""
         if source_lang in ['zh', 'zh-TW', 'zh-CN']:
             for s in segments: s['translated'] = convert(s['text'], 'zh-tw')
             return segments
 
         logger.info("🌍 翻譯處理中 (Google Translate + zhconv)...")
-        translator = GoogleTranslator(source='auto', target='zh-TW')
-        
+
+        def _translate_one(text: str, retries: int = 3) -> str:
+            """單句翻譯，Google 失敗時指數退避 retry，最終 fallback 到 MyMemory。"""
+            last_exc = None
+            for i in range(retries):
+                try:
+                    result = GoogleTranslator(source='auto', target='zh-TW').translate(text)
+                    # 504 / 其他 HTTP 錯誤頁面直接當作文字回傳，需要偵測
+                    if result and '504' not in result and 'That' not in result:
+                        return result
+                    raise ValueError(f"Google 回傳錯誤頁面: {result[:60]}")
+                except Exception as e:
+                    last_exc = e
+                    wait = 2 ** i  # 1s, 2s, 4s
+                    logger.warning(f"⚠️ Google Translate 第 {i+1} 次失敗: {e}，等待 {wait}s 重試")
+                    time.sleep(wait)
+            # fallback: MyMemory (免費，500字/段上限)
+            try:
+                logger.info("↩️ fallback 到 MyMemory Translator")
+                result = MyMemoryTranslator(source='auto', target='zh-TW').translate(text[:499])
+                return result or text
+            except Exception as e:
+                logger.error(f"❌ MyMemory 也失敗: {e}")
+                return text  # 翻不了就原文保留
+
         for i in range(0, len(segments), batch_size):
             batch = segments[i:i+batch_size]
             combined = "\n---\n".join([s['text'] for s in batch])
             try:
-                translated_bulk = translator.translate(combined)
+                translated_bulk = _translate_one(combined)
                 parts = [p.strip() for p in translated_bulk.split("\n---\n")]
-                for s, t in zip(batch, parts):
-                    s['translated'] = convert(t, 'zh-tw')
-            except:
-                for s in batch: s['translated'] = convert(translator.translate(s['text']), 'zh-tw')
+                if len(parts) == len(batch):
+                    for s, t in zip(batch, parts):
+                        s['translated'] = convert(t, 'zh-tw')
+                else:
+                    # 分割數量不符（可能是 Google 合併行），逐句翻
+                    logger.warning("⚠️ 批次分割數量不符，改逐句翻譯")
+                    for s in batch:
+                        s['translated'] = convert(_translate_one(s['text']), 'zh-tw')
+            except Exception as e:
+                logger.error(f"❌ 批次翻譯失敗: {e}，改逐句")
+                for s in batch:
+                    s['translated'] = convert(_translate_one(s['text']), 'zh-tw')
         return segments
 
     def save_srt(self, segments: List[Dict], output_file: str):

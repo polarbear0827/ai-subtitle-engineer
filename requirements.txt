@@ -6,6 +6,10 @@ zhconv
 pysrt
 python-dotenv
 
+# GPU 加速 (CUDA 12 runtime DLLs for ctranslate2 on Windows)
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
+
 # Web 後端
 fastapi
 uvicorn[standard]
