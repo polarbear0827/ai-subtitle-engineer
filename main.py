@@ -18,31 +18,44 @@ for d in [OUTPUT_DIR, UPLOAD_DIR]:
 
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 TASKS: Dict[str, dict] = {}
+
 async def run_task(task_id: str, source: str, model_size: str, lang: Optional[str], is_file: bool = False):
     TASKS[task_id]["status"] = "running"
     eng = MediaSubtitleEngineer(OUTPUT_DIR)
     loop = asyncio.get_event_loop()
-    def log_cb(msg):
-        TASKS[task_id]["logs"].append(msg); logger.info(f"[{task_id}] {msg}")
+    def log_cb(msg, progress=None):
+        if progress: TASKS[task_id]["logs"].append(f"PROGRESS:{progress}")
+        TASKS[task_id]["logs"].append(msg)
+        logger.info(f"[{task_id}] {msg}")
+
     try:
+        log_cb("🚀 任務啟動...", progress=5)
         if is_file:
-            log_cb(f"處理檔案: {os.path.basename(source)}")
+            log_cb(f"處理上傳檔案: {os.path.basename(source)}", progress=20)
             audio_path = source
         else:
-            log_cb(f"分析網址: {source}")
+            log_cb(f"分析網址中: {source}", progress=10)
             audio_path = await loop.run_in_executor(None, eng.download_audio, source)
-        log_cb("✅ 音軌分析中，啟動 ASR...")
+            log_cb("✅ 影片音軌下載成功", progress=30)
+        
+        log_cb("🎙️ 開始 ASR 語音辨識 (此階段較長，請耐心候)...", progress=40)
         segs, d_lang = await loop.run_in_executor(None, eng.transcribe, audio_path, lang, model_size)
-        log_cb(f"✅ 辨識完成 ({d_lang})，翻譯中...")
+        log_cb(f"✅ 辨識完成 (語言: {d_lang})", progress=75)
+        
+        log_cb("🌍 翻譯處理中 (台灣繁體中文校正)...", progress=85)
         results = await loop.run_in_executor(None, eng.translate_batch, segs, d_lang)
+        
         out_name = f"{uuid.uuid4().hex[:8]}.srt"
         out_path = os.path.join(OUTPUT_DIR, out_name)
         await loop.run_in_executor(None, eng.save_srt, results, out_path)
+        log_cb("📂 SRT 檔案儲存成功", progress=95)
+        
         if os.path.exists(audio_path): os.remove(audio_path)
         TASKS[task_id]["status"] = "done"; TASKS[task_id]["output_file"] = f"/output/{out_name}"
-        log_cb("✨ 任務完成！")
+        log_cb("✨ 全部的任務皆已完成！", progress=100)
     except Exception as e:
-        TASKS[task_id]["status"] = "error"; log_cb(f"❌ 錯誤: {str(e)}")
+        TASKS[task_id]["status"] = "error"; log_cb(f"❌ 發生錯誤: {str(e)}")
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request): return templates.TemplateResponse("index.html", {"request": request})
 

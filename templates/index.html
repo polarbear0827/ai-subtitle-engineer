@@ -2,57 +2,100 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Subtitle|雙模轉錄</title>
+    <title>AI Subtitle|旗艦級工具</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
     <style>
         :root { --p:#6366f1; --s:#a855f7; --bg:#0f172a; --cb:rgba(30,41,59,0.75); --tx:#f8fafc; --ac:#22d3ee; }
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family:'Outfit',sans-serif; background:radial-gradient(circle at top right,#1e1b4b,#0f172a); color:var(--tx); min-height:100vh; display:flex; justify-content:center; align-items:center; }
-        .container { width:92%; max-width:800px; padding:40px; background:var(--cb); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); border-radius:24px; }
+        .container { width:92%; max-width:800px; padding:40px; background:var(--cb); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); border-radius:24px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); }
         h1 { font-size:2.4rem; background:linear-gradient(to right,var(--ac),var(--s)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; text-align:center; margin-bottom:25px; }
         .tabs { display:flex; gap:10px; margin-bottom:20px; background:rgba(0,0,0,0.2); padding:5px; border-radius:12px; }
         .tab { flex:1; padding:12px; text-align:center; cursor:pointer; border-radius:10px; color:#94a3b8; font-weight:600; transition:0.3s; }
-        .tab.active { background:var(--p); color:white; }
+        .tab.active { background:var(--p); color:white; box-shadow:0 4px 15px rgba(99,102,241,0.3); }
         .m-sec { display:none; margin-bottom:20px; }
         .m-sec.active { display:block; animation:fade 0.4s; }
         @keyframes fade { from{opacity:0;} to{opacity:1;} }
-        input, select { width:100%; padding:12px; background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.1); border-radius:12px; color:white; outline:none; }
-        .file-drop { border:2px dashed rgba(255,255,255,0.2); padding:30px; text-align:center; border-radius:16px; cursor:pointer; }
-        .btn { width:100%; padding:16px; background:linear-gradient(135deg,var(--p),var(--s)); border:none; border-radius:12px; color:white; font-weight:600; cursor:pointer; }
-        #log { margin-top:20px; background:#000; padding:15px; height:200px; overflow-y:auto; font-family:'JetBrains Mono'; font-size:0.85rem; border-radius:12px; }
+        input, select { width:100%; padding:13px; background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.1); border-radius:12px; color:white; outline:none; font-size:0.95rem; }
+        .file-drop { border:2px dashed rgba(255,255,255,0.2); padding:30px; text-align:center; border-radius:16px; cursor:pointer; transition:0.3s; }
+        .file-drop:hover { border-color:var(--ac); background:rgba(34,211,238,0.05); }
+        .btn { width:100%; padding:16px; background:linear-gradient(135deg,var(--p),var(--s)); border:none; border-radius:12px; color:white; font-weight:600; cursor:pointer; transition:0.3s; }
+        .btn:hover { transform:translateY(-2px); box-shadow:0 10px 20px rgba(99,102,241,0.4); }
+        #log { margin-top:20px; background:#000; padding:15px; height:180px; overflow-y:auto; font-family:'JetBrains Mono'; font-size:0.85rem; border-radius:12px; border:1px solid rgba(255,255,255,0.05); }
+        
+        .pg-box { width:100%; height:8px; background:rgba(0,0,0,0.3); border-radius:10px; margin:20px 0; overflow:hidden; display:none; }
+        .pg-bar { width:0%; height:100%; background:linear-gradient(to right, var(--ac), var(--p)); transition:0.4s; }
+
         #da { margin-top:20px; text-align:center; display:none; }
-        .dl { padding:12px 30px; background:var(--ac); color:#0f172a; text-decoration:none; border-radius:50px; font-weight:600; }
+        .dl { padding:12px 30px; background:var(--ac); color:#0f172a; text-decoration:none; border-radius:50px; font-weight:600; transition:0.3s; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>AI Subtitle Engineer</h1>
-        <div class="tabs"><div class="tab active" data-t="url-m">網址模式</div><div class="tab" data-t="file-m">檔案模式</div></div>
+        <div class="tabs"><div class="tab active" onclick="ST('url-m')">網址模式</div><div class="tab" onclick="ST('file-m')">檔案模式</div></div>
         <form id="f">
             <input type="hidden" name="mode" id="mi" value="url">
-            <div id="url-m" class="m-sec active"><label>影片網址</label><input type="text" name="url" placeholder="https://..."></div>
-            <div id="file-m" class="m-sec"><label>上傳影片</label><div class="file-drop" onclick="fi.click()"><p id="fn">點擊上傳影片</p><input type="file" name="file" id="fi" style="display:none" accept="video/*"></div></div>
+            <div id="url-m" class="m-sec active"><label style="display:block;margin-bottom:8px;color:var(--ac)">影片網址 (YouTube, X, FB, IG)</label><input type="text" name="url" placeholder="https://..."></div>
+            <div id="file-m" class="m-sec"><label style="display:block;margin-bottom:8px;color:var(--ac)">上傳本地影片</label><div class="file-drop" onclick="fi.click()"><p id="fn">點擊或拖放影片至此</p><input type="file" name="file" id="fi" style="display:none" accept="video/*"></div></div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-top:15px;">
-                <select name="model"><option value="small">Small</option><option value="medium">Medium</option><option value="large-v3" selected>Large-v3</option></select>
-                <input type="text" name="lang" placeholder="語言(選填)">
+                <div><label style="display:block;margin-bottom:8px;color:var(--ac)">辨識模型</label><select name="model"><option value="small">Small (快)</option><option value="medium">Medium</option><option value="large-v3" selected>Large-v3 (穩)</option></select></div>
+                <div><label style="display:block;margin-bottom:8px;color:var(--ac)">目標語系</label><select name="lang">
+                    <option value="" selected>自動偵測偵測 (Auto)</option>
+                    <option value="zh">繁體中文 (Taiwan)</option>
+                    <option value="en">英文 (English)</option>
+                    <option value="ja">日文 (Japanese)</option>
+                    <option value="ko">韓文 (Korean)</option>
+                </select></div>
             </div>
-            <button type="submit" class="btn" id="bt" style="margin-top:20px">開始自動轉錄</button>
+            <div class="pg-box" id="pgb"><div class="pg-bar" id="pg"></div></div>
+            <button type="submit" class="btn" id="bt" style="margin-top:10px">啟動自動轉錄流程</button>
         </form>
         <div id="log"></div>
-        <div id="da"><p style="color:#4ade80; margin-bottom:10px;">✨ 處理完成！</p><a href="#" class="dl" id="dl" download>下載 SRT</a></div>
+        <div id="da"><p style="color:#4ade80; margin-bottom:15px;">✨ 任務完成！請下載您的 SRT 字幕檔：</p><a href="#" class="dl" id="dl" download>下載 SRT 檔案</a></div>
     </div>
     <script>
-        const tabs=document.querySelectorAll('.tab'), secs=document.querySelectorAll('.m-sec'), mi=document.getElementById('mi'), f=document.getElementById('f'), fi=document.getElementById('fi'), fn=document.getElementById('fn'), log=document.getElementById('log'), da=document.getElementById('da'), dl=document.getElementById('dl'), bt=document.getElementById('bt');
-        tabs.forEach(t=>t.onclick=()=>{ tabs.forEach(x=>x.classList.remove('active')); secs.forEach(x=>x.classList.remove('active')); t.classList.add('active'); document.getElementById(t.dataset.t).classList.add('active'); mi.value=t.dataset.t==='url-m'?'url':'file'; });
+        const mi=document.getElementById('mi'), f=document.getElementById('f'), fi=document.getElementById('fi'), fn=document.getElementById('fn'), log=document.getElementById('log'), da=document.getElementById('da'), dl=document.getElementById('dl'), bt=document.getElementById('bt'), pgb=document.getElementById('pgb'), pg=document.getElementById('pg');
+        
+        function ST(t){
+            document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+            document.querySelectorAll('.m-sec').forEach(x=>x.classList.remove('active'));
+            event.target.classList.add('active'); document.getElementById(t).classList.add('active');
+            mi.value=t==='url-m'?'url':'file';
+        }
+
         fi.onchange=()=>{ if(fi.files[0]) fn.innerText=已選: ; };
+
         f.onsubmit=async(e)=>{
-            e.preventDefault(); log.innerHTML=''; log.style.display='block'; da.style.display='none'; bt.disabled=true; bt.innerText='處理中...';
-            const fd=new FormData(f), ep=mi.value==='url'?'/api/transcribe':'/api/upload';
-            const r=await fetch(ep,{method:'POST', body:fd}), d=await r.json(), es=new EventSource(/api/logs/);
-            es.onmessage=(ev)=>{
-                const m=ev.data; if(m.startsWith('COMPLETED:')){ dl.href=m.replace('COMPLETED:',''); da.style.display='block'; bt.disabled=false; bt.innerText='開始自動轉錄'; es.close(); return; }
-                const v=document.createElement('div'); v.style.color=m.includes('✅')?'#4ade80':'#94a3b8'; v.innerText=> ; log.appendChild(v); log.scrollTop=log.scrollHeight;
-            };
+            e.preventDefault(); e.stopPropagation();
+            log.innerHTML=''; log.style.display='block'; da.style.display='none'; pgb.style.display='block'; pg.style.width='0%';
+            bt.disabled=true; bt.innerText='處理中...請稍候';
+            
+            const fd=new FormData(f);
+            const ep=mi.value==='url'?'/api/transcribe':'/api/upload';
+            
+            try {
+                const r=await fetch(ep,{method:'POST', body:fd});
+                const d=await r.json();
+                if(d.error) throw new Error(d.error);
+                
+                const es=new EventSource(/api/logs/);
+                es.onmessage=(ev)=>{
+                    const m=ev.data;
+                    if(m.startsWith('PROGRESS:')){
+                        const p=m.split(':')[1]; pg.style.width=${p}%; return;
+                    }
+                    if(m.startsWith('COMPLETED:')){
+                        dl.href=m.replace('COMPLETED:',''); da.style.display='block'; pg.style.width='100%';
+                        bt.disabled=false; bt.innerText='再次執行'; es.close(); return;
+                    }
+                    const v=document.createElement('div');
+                    v.style.color=m.includes('✅')?'#4ade80':(m.includes('❌')?'#f87171':'#94a3b8');
+                    v.innerText=> ; log.appendChild(v); log.scrollTop=log.scrollHeight;
+                };
+            } catch(err) {
+                log.innerText='> 發生錯誤: ' + err.message; bt.disabled=false; bt.innerText='重試';
+            }
         };
     </script>
 </body>
