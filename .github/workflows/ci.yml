@@ -1,4 +1,4 @@
-﻿name: Python CI
+﻿name: Python CI (Flagship)
 
 on:
   push:
@@ -9,16 +9,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # 提前選擇 Node.js 24 以消除棄用警告
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
     
     - name: Set up Python 3.10
       uses: actions/setup-python@v5
       with:
         python-version: "3.10"
+        # 啟用快取提升速度
+        cache: 'pip'
     
-    - name: Install system dependencies
+    - name: Install FFmpeg
       run: |
         sudo apt-get update
         sudo apt-get install -y ffmpeg
@@ -29,12 +35,15 @@ jobs:
         pip install flake8 pytest
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    - name: Lint with flake8
+    - name: Lint Analysis (PEP8)
       run: |
+        # 檢查關鍵錯誤
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # 警告與裝飾
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-    - name: Test Core Modules
+    - name: Unit Test (Module Import)
       run: |
-        # 測試翻譯模組與基本匯入
-        python -c "from transcribe_and_translate import BatchTranslator; t = BatchTranslator(); print('Translation Module OK!')"
+        # 核心：修正類別導入測試
+        python -c "from transcribe_and_translate import MediaSubtitleEngineer; print('✅ MediaSubtitleEngineer Import Success!')"
+        python -c "from main import app; print('✅ FastAPI Backend Import Success!')"
