@@ -58,36 +58,35 @@ class MediaSubtitleEngineer:
         """ASR 辨識模組 — 自動偵測 GPU/CPU"""
         logger.info(f"🎙️ ASR 開始 (模型: {model_size})...")
 
-        model = None
-        # 嘗試順序: auto(GPU優先) -> CPU float32
         attempts = [
             dict(device="auto", compute_type="auto"),
             dict(device="cpu",  compute_type="float32"),
         ]
+
         last_err = None
         for attempt in attempts:
             try:
-                logger.info(f"嘗試載入模型: {attempt}")
+                logger.info(f"嘗試: {attempt}")
                 model = WhisperModel(model_size, **attempt)
-                break
+                # 注意：也把 transcribe 放進來，因為 CUDA 錯誤可能發生在推理階段
+                segments_gen, info = model.transcribe(
+                    audio_path, language=lang, beam_size=5,
+                    vad_filter=True,
+                    vad_parameters=dict(min_silence_duration_ms=500)
+                )
+                # 實際運行生成器（這裡才真正執行 CUDA 操作）
+                results = []
+                for segment in segments_gen:
+                    results.append({"start": segment.start, "end": segment.end, "text": segment.text.strip()})
+                logger.info(f"偵測語言: {info.language}")
+                return results, info.language
             except Exception as e:
                 last_err = e
-                logger.warning(f"⚠️ 模型載入失敗 ({attempt}): {e}")
+                logger.warning(f"⚠️ 失敗 ({attempt['device']}): {e}")
+                if attempt['device'] == 'cpu':
+                    break  # CPU 也失敗，放棄
 
-        if model is None:
-            raise RuntimeError(f"無法載入 Whisper 模型，所有嘗試均失敗。最後錯誤: {last_err}")
-
-        segments, info = model.transcribe(
-            audio_path, language=lang, beam_size=5,
-            vad_filter=True,
-            vad_parameters=dict(min_silence_duration_ms=500)
-        )
-
-        logger.info(f"偵測語言: {info.language}")
-        results = []
-        for segment in segments:
-            results.append({"start": segment.start, "end": segment.end, "text": segment.text.strip()})
-        return results, info.language
+        raise RuntimeError(f"無法完成 ASR 辨識。最後錯誤: {last_err}")
 
     def translate_batch(self, segments: List[Dict], source_lang: str, batch_size: int = 30):
         """翻譯與台灣繁體中文優化"""
