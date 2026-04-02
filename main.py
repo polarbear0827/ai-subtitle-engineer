@@ -1,9 +1,8 @@
-﻿import os, uuid, asyncio, logging, shutil
+import os, uuid, asyncio, logging, shutil
 from typing import Dict, Optional
 from fastapi import FastAPI, Request, BackgroundTasks, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from transcribe_and_translate import MediaSubtitleEngineer
 
 logging.basicConfig(level=logging.INFO)
@@ -16,7 +15,7 @@ UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 for d in [OUTPUT_DIR, UPLOAD_DIR]:
     if not os.path.exists(d): os.makedirs(d)
 
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+INDEX_HTML = os.path.join(BASE_DIR, "templates", "index.html")
 TASKS: Dict[str, dict] = {}
 
 async def run_task(task_id: str, source: str, model_size: str, lang: Optional[str], is_file: bool = False):
@@ -57,7 +56,7 @@ async def run_task(task_id: str, source: str, model_size: str, lang: Optional[st
         TASKS[task_id]["status"] = "error"; log_cb(f"❌ 發生錯誤: {str(e)}")
 
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request): return templates.TemplateResponse("index.html", {"request": request})
+async def home(): return FileResponse(INDEX_HTML, media_type="text/html")
 
 @app.post("/api/transcribe")
 async def start_url_task(background_tasks: BackgroundTasks, url: str = Form(...), model: str = Form("large-v3"), lang: str = Form(None)):
